@@ -1,65 +1,57 @@
+#include <Arduino.h>
+#include <U8g2lib.h>
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
+#include <SPI.h>
 
-// Choose two pins for SoftwareSerial
+// GPS Pins
 static const int RXPin = 4, TXPin = 3;
-static const uint32_t GPSBaud = 9600; // Default for NEO-6M
+static const uint32_t GPSBaud = 9600;
 
-// Create TinyGPS++ and SoftwareSerial objects
 TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
 
-void setup() {
-  Serial.begin(115200); // PC communication
-  ss.begin(GPSBaud);    // GPS communication
+// Display Setup for SPI (Pin 8:CS, 10:DC, 9:Reset)
+// Hardware SPI uses Pin 11 (MOSI) and Pin 13 (SCK) automatically
+U8G2_SSD1306_128X64_NONAME_F_4W_HW_SPI u8g2(U8G2_R0, 8, 10, 9);
 
-  Serial.println(F("Initializing GPS..."));
+void setup() {
+  ss.begin(GPSBaud);
+  u8g2.begin();
 }
 
 void loop() {
-  // Feed the library every character coming from the GPS module
+  // Feed GPS data to the parser
   while (ss.available() > 0) {
     if (gps.encode(ss.read())) {
-      displayInfo();
+      updateDisplay();
     }
   }
 
-  // If no data is received within 5 seconds, report an error
-  if (millis() > 5000 && gps.charsProcessed() < 10) {
-    Serial.println(F("No GPS detected: check wiring."));
-    while(true);
+  // Optional: Update display even if no new valid encoding (to show 0)
+  if (millis() % 1000 == 0) {
+    updateDisplay();
   }
 }
 
-void displayInfo() {
-  Serial.print(F("Location: ")); 
-  if (gps.location.isValid()) {
-    Serial.print(gps.location.lat(), 6);
-    Serial.print(F(","));
-    Serial.print(gps.location.lng(), 6);
-  } else {
-    Serial.print(F("INVALID"));
+void updateDisplay() {
+  u8g2.clearBuffer();
+  
+  // Header text
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(25, 15, "SATELLITES");
+  
+  // Large Number for Satellites
+  u8g2.setFont(u8g2_font_logisoso32_tn); // Nice, big numbers
+  
+  int satCount = 0;
+  if (gps.satellites.isValid()) {
+    satCount = gps.satellites.value();
   }
-
-  Serial.print(F("  Date/Time: "));
-  if (gps.date.isValid()) {
-    Serial.print(gps.date.month());
-    Serial.print(F("/"));
-    Serial.print(gps.date.day());
-    Serial.print(F("/"));
-    Serial.print(gps.date.year());
-  }
-
-  Serial.print(F(" "));
-  if (gps.time.isValid()) {
-    if (gps.time.hour() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.hour());
-    Serial.print(F(":"));
-    if (gps.time.minute() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.minute());
-  }
-
-  Serial.print(F(" Speed: "));
-  Serial.print(gps.speed.kmph());
-  Serial.println(F(" km/h"));
+  
+  // Center the number roughly
+  u8g2.setCursor(50, 55);
+  u8g2.print(satCount);
+  
+  u8g2.sendBuffer();
 }
